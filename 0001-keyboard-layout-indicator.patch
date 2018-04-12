@@ -1,20 +1,19 @@
-From 3995f55e8f88a58a7aea079b2812ddfc38238990 Mon Sep 17 00:00:00 2001
+From f8df670f53d8d6386d4b21921bfd90e0e5d5fd5d Mon Sep 17 00:00:00 2001
 From: nogaems <nogaems@users.noreply.github.com>
-Date: Fri, 27 Jan 2017 18:25:35 +0300
-Subject: [PATCH 1/4] Implemented widget indicator of the current keyboard
- layout.
+Date: Thu, 12 Apr 2018 20:02:49 +0300
+Subject: [PATCH] Add the keyboard layout indicator
 
 ---
- driver/Makefile.in     |   6 +--
+ driver/Makefile.in     |   8 ++--
  driver/layout_widget.c | 124 +++++++++++++++++++++++++++++++++++++++++++++++++
  driver/layout_widget.h |   8 ++++
- driver/lock.c          |  48 +++++++++++++++++--
- 4 files changed, 180 insertions(+), 6 deletions(-)
+ driver/lock.c          |  62 +++++++++++++++++++++++--
+ 4 files changed, 195 insertions(+), 7 deletions(-)
  create mode 100644 driver/layout_widget.c
  create mode 100644 driver/layout_widget.h
 
 diff --git a/driver/Makefile.in b/driver/Makefile.in
-index e2a600d..6fe02d3 100644
+index a570a27..29f7ecf 100644
 --- a/driver/Makefile.in
 +++ b/driver/Makefile.in
 @@ -108,8 +108,8 @@ PAM_OBJS	= passwd-pam.o
@@ -28,13 +27,16 @@ index e2a600d..6fe02d3 100644
  NOLOCK_SRCS_1	= lock.c
  NOLOCK_OBJS_1	= lock.o
  
-@@ -204,7 +204,7 @@ PDF2JPEG_LIBS	= -framework Cocoa
+@@ -202,9 +202,9 @@ PDF2JPEG_SRCS	= pdf2jpeg.m
+ PDF2JPEG_OBJS	= pdf2jpeg.o
+ PDF2JPEG_LIBS	= -framework Cocoa
  
- SAVER_LIBS	= $(LIBS) $(X_LIBS) $(XMU_LIBS) @SAVER_LIBS@ \
+-SAVER_LIBS	= $(LIBS) $(X_LIBS) $(XMU_LIBS) @SAVER_LIBS@ \
++SAVER_LIBS	= $(cLIBS) $(X_LIBS) $(XMU_LIBS) @SAVER_LIBS@ \
  		  $(XDPMS_LIBS) $(XINERAMA_LIBS) $(GL_LIBS) $(X_PRE_LIBS) \
 -		  -lXt -lX11 -lXext $(X_EXTRA_LIBS) \
 +		  -lXt -lX11 -lXext -lxkbfile $(X_EXTRA_LIBS) \
- 		  $(PASSWD_LIBS)
+ 		  $(PASSWD_LIBS) $(INTL_LIBS)
  
  CMD_LIBS	= $(LIBS) $(X_LIBS) \
 diff --git a/driver/layout_widget.c b/driver/layout_widget.c
@@ -182,7 +184,7 @@ index 0000000..070ec5e
 +extern int getCurrentKeyboardLayout(Display *dpy, char *result);
 +extern void uppercase(char * str);
 diff --git a/driver/lock.c b/driver/lock.c
-index ec413ae..6be7ef4 100644
+index 4445c24..042b2bd 100644
 --- a/driver/lock.c
 +++ b/driver/lock.c
 @@ -22,11 +22,12 @@
@@ -199,17 +201,21 @@ index ec413ae..6be7ef4 100644
  
  #ifndef NO_LOCKING              /* (mostly) whole file */
  
-@@ -166,7 +167,8 @@ struct passwd_dialog_data {
+@@ -166,7 +167,12 @@ struct passwd_dialog_data {
  
    Dimension thermo_field_x, thermo_field_y;
    Dimension thermo_field_height;
 -
-+  Dimension date_field_x, date_field_y;
++    
++  Dimension date_field_x1, date_field_x2, date_field_y;
++  Dimension date_field_height;
++  Dimension date_field_spacing;
++  Dimension date_string_width;
 +    
    Pixmap logo_pixmap;
    Pixmap logo_clipmask;
    int logo_npixels;
-@@ -725,7 +727,6 @@ make_passwd_window (saver_info *si,
+@@ -704,7 +710,6 @@ make_passwd_window (saver_info *si,
    return 0;
  }
  
@@ -217,7 +223,7 @@ index ec413ae..6be7ef4 100644
  static void
  draw_passwd_window (saver_info *si)
  {
-@@ -888,17 +889,25 @@ draw_passwd_window (saver_info *si)
+@@ -867,17 +872,30 @@ draw_passwd_window (saver_info *si)
     */
    {
      char buf[100];
@@ -237,13 +243,18 @@ index ec413ae..6be7ef4 100644
      y1 += (spacing + tb_height);
      y1 += spacing/2;
      sw = string_width (pw->date_font, buf);
++    
++    pw->date_field_x2 = x2;
++    pw->date_field_x1 = x1 + x2 - sw;
++    pw->date_string_width = string_width(pw->date_font, buf);
      x2 = x1 + x2 - sw;
-+    pw->date_field_x = x2;
 +    pw->date_field_y = y1;
++    pw->date_field_spacing = spacing;
++    pw->date_field_height = pw->passwd_font->ascent + pw->passwd_font->descent;
      XDrawString (si->dpy, si->passwd_dialog, gc1, x2, y1, buf, strlen(buf));
    }
  
-@@ -1181,6 +1190,39 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
+@@ -1160,6 +1178,44 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
  		      pw->thermo_width-2,
  		      MAX (0, pw->thermo_field_height - y - 2));
      }
@@ -253,7 +264,7 @@ index ec413ae..6be7ef4 100644
 +    /* Getting date */
 +    char buf[100];
 +    char layout[32];
-+    int string_width, font_height;
++    int string_width;
 +    time_t now = time ((time_t *) 0);
 +    struct tm *tm = localtime (&now);
 +    memset (buf, 0, sizeof(buf));
@@ -263,244 +274,31 @@ index ec413ae..6be7ef4 100644
 +    getCurrentKeyboardLayout(si->dpy, layout);
 +    uppercase(layout);
 +    strcat(strcat(buf, " "),layout);
-+    
-+    /* Clean up */    
-+    XSetFont(si->dpy, gc1, pw->date_font->fid); 
-+    string_width = XTextWidth(pw->date_font, buf,strlen(buf)); 
-+    font_height = pw->date_font->ascent + pw->date_font->descent; 
-+    
-+    XSetForeground (si->dpy, gc1, pw->background); 
++
++    string_width = XTextWidth(pw->date_font, buf,strlen(buf));
++
++    /* Clean up */
++    XSetForeground(si->dpy, gc1, pw->background); 
 +    XFillRectangle(si->dpy, si->passwd_dialog, gc1,
-+                   pw->date_field_x, pw->date_field_y - font_height,
-+                   string_width, font_height);
++                   pw->date_field_x1,
++                   pw->date_field_y - pw->date_field_height + pw->date_field_spacing,
++                   string_width,
++                   pw->date_field_height);
 +    XSetFont(si->dpy, gc1, pw->date_font->fid);
 +    XSetForeground(si->dpy,gc1, pw->foreground);
 +
 +    /* Updating */
-+    XDrawString (si->dpy, si->passwd_dialog, gc1, pw->date_field_x, pw->date_field_y,  
-+                  buf, strlen(buf));      
-+  }
- 
-   if (pw->button_state_changed_p)
-     {
--- 
-2.7.3
-
-
-From aba94cd5abf63986e02f612aef0cda6d89d85389 Mon Sep 17 00:00:00 2001
-From: nogaems <nogaems@users.noreply.github.com>
-Date: Fri, 27 Jan 2017 22:03:20 +0300
-Subject: [PATCH 2/4] Fixed long layout names
-
----
- driver/lock.c | 29 +++++++++++++++++------------
- 1 file changed, 17 insertions(+), 12 deletions(-)
-
-diff --git a/driver/lock.c b/driver/lock.c
-index 6be7ef4..dae82bf 100644
---- a/driver/lock.c
-+++ b/driver/lock.c
-@@ -167,7 +167,9 @@ struct passwd_dialog_data {
- 
-   Dimension thermo_field_x, thermo_field_y;
-   Dimension thermo_field_height;
--  Dimension date_field_x, date_field_y;
-+    
-+  Dimension date_field_x1, date_field_x2, date_field_y;
-+  Dimension date_field_height;
-     
-   Pixmap logo_pixmap;
-   Pixmap logo_clipmask;
-@@ -905,9 +907,12 @@ draw_passwd_window (saver_info *si)
-     y1 += (spacing + tb_height);
-     y1 += spacing/2;
-     sw = string_width (pw->date_font, buf);
-+    
-     x2 = x1 + x2 - sw;
--    pw->date_field_x = x2;
-+    pw->date_field_x1 = x1 + x2 - sw;
-+    pw->date_field_x2 = x2;
-     pw->date_field_y = y1;
-+    pw->date_field_height = pw->passwd_font->ascent + pw->passwd_font->descent;
-     XDrawString (si->dpy, si->passwd_dialog, gc1, x2, y1, buf, strlen(buf));
-   }
- 
-@@ -1196,7 +1201,7 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
-     /* Getting date */
-     char buf[100];
-     char layout[32];
--    int string_width, font_height;
-+    int string_width;
-     time_t now = time ((time_t *) 0);
-     struct tm *tm = localtime (&now);
-     memset (buf, 0, sizeof(buf));
-@@ -1208,19 +1213,19 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
-     strcat(strcat(buf, " "),layout);
-     
-     /* Clean up */    
--    XSetFont(si->dpy, gc1, pw->date_font->fid); 
--    string_width = XTextWidth(pw->date_font, buf,strlen(buf)); 
--    font_height = pw->date_font->ascent + pw->date_font->descent; 
--    
--    XSetForeground (si->dpy, gc1, pw->background); 
-+    XSetForeground(si->dpy, gc1, pw->background); 
-     XFillRectangle(si->dpy, si->passwd_dialog, gc1,
--                   pw->date_field_x, pw->date_field_y - font_height,
--                   string_width, font_height);
-+                   pw->date_field_x2,
-+                   pw->date_field_y - pw->date_field_height,
-+                   pw->date_field_x2 - pw->date_field_x1,
-+                   pw->date_field_height);
-     XSetFont(si->dpy, gc1, pw->date_font->fid);
-     XSetForeground(si->dpy,gc1, pw->foreground);
- 
--    /* Updating */
--    XDrawString (si->dpy, si->passwd_dialog, gc1, pw->date_field_x, pw->date_field_y,  
-+    /* Updating */     
 +    string_width = XTextWidth(pw->date_font, buf,strlen(buf));
-+    pw->date_field_x1 =  pw->date_field_x2 - string_width;
-+    XDrawString (si->dpy, si->passwd_dialog, gc1, pw->date_field_x2, pw->date_field_y,  
-                   buf, strlen(buf));      
-   }
- 
--- 
-2.7.3
-
-
-From 42458b46c2e959e7693b0fb243fd4be970dda224 Mon Sep 17 00:00:00 2001
-From: nogaems <nogaems@users.noreply.github.com>
-Date: Fri, 27 Jan 2017 22:36:52 +0300
-Subject: [PATCH 3/4] Y-offset when XFillRectangle called has been fixed.
-
----
- driver/lock.c | 8 +++++---
- 1 file changed, 5 insertions(+), 3 deletions(-)
-
-diff --git a/driver/lock.c b/driver/lock.c
-index dae82bf..6e46255 100644
---- a/driver/lock.c
-+++ b/driver/lock.c
-@@ -170,6 +170,7 @@ struct passwd_dialog_data {
-     
-   Dimension date_field_x1, date_field_x2, date_field_y;
-   Dimension date_field_height;
-+  Dimension date_field_spacing;
-     
-   Pixmap logo_pixmap;
-   Pixmap logo_clipmask;
-@@ -912,6 +913,7 @@ draw_passwd_window (saver_info *si)
-     pw->date_field_x1 = x1 + x2 - sw;
-     pw->date_field_x2 = x2;
-     pw->date_field_y = y1;
-+    pw->date_field_spacing = spacing;
-     pw->date_field_height = pw->passwd_font->ascent + pw->passwd_font->descent;
-     XDrawString (si->dpy, si->passwd_dialog, gc1, x2, y1, buf, strlen(buf));
-   }
-@@ -1201,7 +1203,7 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
-     /* Getting date */
-     char buf[100];
-     char layout[32];
--    int string_width;
-+    int string_width, spacing;
-     time_t now = time ((time_t *) 0);
-     struct tm *tm = localtime (&now);
-     memset (buf, 0, sizeof(buf));
-@@ -1212,11 +1214,11 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
-     uppercase(layout);
-     strcat(strcat(buf, " "),layout);
-     
--    /* Clean up */    
-+    /* Clean up */
-     XSetForeground(si->dpy, gc1, pw->background); 
-     XFillRectangle(si->dpy, si->passwd_dialog, gc1,
-                    pw->date_field_x2,
--                   pw->date_field_y - pw->date_field_height,
-+                   pw->date_field_y - pw->date_field_height + pw->date_field_spacing,
-                    pw->date_field_x2 - pw->date_field_x1,
-                    pw->date_field_height);
-     XSetFont(si->dpy, gc1, pw->date_font->fid);
--- 
-2.7.3
-
-
-From 152c577e5561e3790d67b247e4c3748514363fba Mon Sep 17 00:00:00 2001
-From: nogaems <nogaems@users.noreply.github.com>
-Date: Fri, 27 Jan 2017 22:52:02 +0300
-Subject: [PATCH 4/4] Fix X-offset.
-
----
- driver/lock.c | 27 +++++++++++++++++----------
- 1 file changed, 17 insertions(+), 10 deletions(-)
-
-diff --git a/driver/lock.c b/driver/lock.c
-index 6e46255..67710c2 100644
---- a/driver/lock.c
-+++ b/driver/lock.c
-@@ -171,6 +171,7 @@ struct passwd_dialog_data {
-   Dimension date_field_x1, date_field_x2, date_field_y;
-   Dimension date_field_height;
-   Dimension date_field_spacing;
-+  Dimension date_string_width;
-     
-   Pixmap logo_pixmap;
-   Pixmap logo_clipmask;
-@@ -909,9 +910,10 @@ draw_passwd_window (saver_info *si)
-     y1 += spacing/2;
-     sw = string_width (pw->date_font, buf);
-     
--    x2 = x1 + x2 - sw;
--    pw->date_field_x1 = x1 + x2 - sw;
-     pw->date_field_x2 = x2;
-+    pw->date_field_x1 = x1 + x2 - sw;
-+    pw->date_string_width = string_width(pw->date_font, buf);
-+    x2 = x1 + x2 - sw;
-     pw->date_field_y = y1;
-     pw->date_field_spacing = spacing;
-     pw->date_field_height = pw->passwd_font->ascent + pw->passwd_font->descent;
-@@ -1203,7 +1205,7 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
-     /* Getting date */
-     char buf[100];
-     char layout[32];
--    int string_width, spacing;
-+    int string_width;
-     time_t now = time ((time_t *) 0);
-     struct tm *tm = localtime (&now);
-     memset (buf, 0, sizeof(buf));
-@@ -1213,22 +1215,27 @@ update_passwd_window (saver_info *si, const char *printed_passwd, float ratio)
-     getCurrentKeyboardLayout(si->dpy, layout);
-     uppercase(layout);
-     strcat(strcat(buf, " "),layout);
--    
-+
-+    string_width = XTextWidth(pw->date_font, buf,strlen(buf));
-+
-     /* Clean up */
-     XSetForeground(si->dpy, gc1, pw->background); 
-     XFillRectangle(si->dpy, si->passwd_dialog, gc1,
--                   pw->date_field_x2,
-+                   pw->date_field_x1,
-                    pw->date_field_y - pw->date_field_height + pw->date_field_spacing,
--                   pw->date_field_x2 - pw->date_field_x1,
-+                   string_width,
-                    pw->date_field_height);
-     XSetFont(si->dpy, gc1, pw->date_font->fid);
-     XSetForeground(si->dpy,gc1, pw->foreground);
- 
--    /* Updating */     
-+    /* Updating */
-     string_width = XTextWidth(pw->date_font, buf,strlen(buf));
--    pw->date_field_x1 =  pw->date_field_x2 - string_width;
--    XDrawString (si->dpy, si->passwd_dialog, gc1, pw->date_field_x2, pw->date_field_y,  
--                  buf, strlen(buf));      
 +    pw->date_field_x1 = pw->date_field_x1 - (string_width - pw->date_string_width);
 +    pw->date_string_width = string_width;
 +    XDrawString(si->dpy, si->passwd_dialog, gc1,
 +                pw->date_field_x1,
 +                pw->date_field_y,  
 +                buf, strlen(buf));      
-   }
++  }
  
    if (pw->button_state_changed_p)
+     {
 -- 
-2.7.3
+2.16.1
 
