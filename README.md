@@ -17,7 +17,7 @@ You must suffer. Or build xscreensaver bypassing your packet manager this way:
 
 ```
 cd <directory-with-sources-of-xscreensaver>
-curl https://raw.githubusercontent.com/nogaems/pmkl/master/0001-keyboard-layout-indicator.patch > patch -p1
+curl https://raw.githubusercontent.com/nogaems/pmkl/master/0001-keyboard-layout-indicator.patch | patch -p1
 ./configure
 make
 sudo make install
