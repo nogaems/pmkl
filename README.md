@@ -3,7 +3,7 @@ Print my keyboard layout: [Proof of concept] (https://github.com/nogaems/pmkl/bl
 
 ## Gentoo:
 ```
-curl https://raw.githubusercontent.com/nogaems/pmkl/master/{0001-keyboard-layout-indicator.patch} -o /etc/portage/patches/x11-misc/xscreensaver-<version>/#1
+curl https://raw.githubusercontent.com/nogaems/pmkl/master/{0001-keyboard-layout-indicator.patch} --create-dirs -o /etc/portage/patches/x11-misc/xscreensaver-<version>/#1
 emerge -1 xscreensaver
 ```
 
