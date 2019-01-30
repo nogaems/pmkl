@@ -66,7 +66,7 @@ index 0000000..b2e5434
 +    XkbRF_VarDefsRec vd;
 +    char *tmp = NULL;
 +
-+    /* Getting all the stored Xkb options */
++    /* Getting all stored Xkb options */
 +    
 +    if (!XkbRF_GetNamesProp(dpy, &tmp, &vd) || !tmp)
 +    {
@@ -76,11 +76,11 @@ index 0000000..b2e5434
 +        return -1;
 +    }   
 +
-+    /* Maximal number of layouts are hardcoded to 2. 
-+       I really don't have an idea how to handle this in case 
++    /* Maximal number of layouts is hardcoded to 2. 
++       I don't have an idea how to handle this in case 
 +       of 2+ groups because this method is based on checking of 
-+       the Xkb Groups which there are 2 by default. 
-+       I'll handle this behavior *later*, now it's just works. */
++       the Xkb Groups and there are only 2 of them by default. 
++       I'll handle this behavior *later*, now it just works. */
 +
 +    
 +    char *layouts[MAX_LAYOUTS_COUNT]; 
@@ -99,7 +99,7 @@ index 0000000..b2e5434
 +    }
 +    if (counter == 1)
 +    {
-+        /* There is defined only one keyboard layout */
++        /* There is only one keyboard layout defined */
 +        
 +        strcpy(result, layouts[0]);
 +        return 0;
